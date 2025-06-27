@@ -85,7 +85,7 @@
     const uploadedFiles = {};
 
     const folderName = now.toISOString().split('T')[0];
-    fetch('/api/upload', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ folderName }) });
+  // fetch('/api/upload', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ folderName }) });
 
     function updateTaskCounter() {
       const total = items.length;
