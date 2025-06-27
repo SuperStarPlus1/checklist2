@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 export const config = { runtime: "nodejs" };
 
 async function getDropboxAccessToken() {
@@ -62,10 +60,8 @@ export default async function handler(req, res) {
       const status = section.done ? '✅' : '❌';
       reportLines.push(`<h3 style="text-align:right;">${status} ${section.text}</h3>`);
 
-      // תמונות רק לסעיפים שמציינים requireImage:true
       if (section.requireImage) {
         if (section.images && section.images.length > 0) {
-          // מציג עד 3 תמונות בשורה
           const imgsHtml = [];
           for (let i = 0; i < Math.min(3, section.images.length); i++) {
             const imagePath = `/forms/${folderName}/${section.images[i]}`;
@@ -73,7 +69,6 @@ export default async function handler(req, res) {
             try {
               base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, imagePath);
             } catch {
-              // אם לא נמצאה תמונה, מציג לוגו חליפי
               base64Image = null;
             }
             if (base64Image) {
@@ -83,11 +78,9 @@ export default async function handler(req, res) {
           if (imgsHtml.length > 0) {
             reportLines.push(`<div style="display:flex; justify-content:flex-start; direction:ltr;">${imgsHtml.join('')}</div>`);
           } else {
-            // אם לא היו תמונות מוצגות, מציג לוגו
             reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
           }
         } else {
-          // אין תמונות כלל - מציג לוגו
           reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
         }
       }
@@ -116,7 +109,6 @@ export default async function handler(req, res) {
       </html>
     `;
 
-    // שמירת הדוח בתיקיית הפרויקט בדרופבוקס
     const filename = `report_${folderName}.html`;
     const uploadResponse = await fetch("https://content.dropboxapi.com/2/files/upload", {
       method: "POST",
@@ -130,7 +122,7 @@ export default async function handler(req, res) {
           mute: false,
         }),
       },
-      body: Buffer.from(html),
+      body: Buffer.from(html, 'utf-8'),
     });
 
     if (!uploadResponse.ok) {
@@ -139,7 +131,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to upload report" });
     }
 
-    // יצירת קישור שיתוף
     const shareResponse = await fetch("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings", {
       method: "POST",
       headers: {
