@@ -1,11 +1,12 @@
-export const config = { runtime: "nodejs" };
+import { getDropboxAccessToken } from './share-report';
 
-const DROPBOX_TOKEN = process.env.DROPBOX_TOKEN;
+export const config = { runtime: "nodejs" };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    const DROPBOX_TOKEN = await getDropboxAccessToken();
     const { folderName, fileName, fileData } = req.body;
     const basePath = `/forms/${folderName}`;
     let finalPath = basePath;
