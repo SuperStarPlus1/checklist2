@@ -23,7 +23,11 @@ export default async function handler(req, res) {
       });
 
       if (checkResp.status === 409) break; // folder does not exist
-      if (!checkResp.ok) throw new Error("שגיאה בבדיקת שם תיקיה");
+      if (!checkResp.ok) {
+        const errorText = await checkResp.text();
+        console.error("get_metadata error:", errorText);
+        throw new Error("שגיאה בבדיקת שם תיקיה");
+      }
       finalPath = `${basePath}_ver${version}`;
       version++;
     }
@@ -62,6 +66,6 @@ export default async function handler(req, res) {
     res.status(200).json({ success: true, folderPath: finalPath });
   } catch (err) {
     console.error("Upload Error:", err);
-    res.status(500).json({ error: 'Internal Server Error' });
+    res.status(500).json({ error: 'Internal Server Error', details: err.message });
   }
 }
