@@ -84,8 +84,28 @@
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
 
-   // const folderName = now.toISOString().split('T')[0];
- //   fetch('/api/upload', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ folderName }) });
+   const now = new Date();
+document.getElementById("dateTime").value = now.toLocaleString();
+
+const folderName = now.toISOString().split('T')[0];
+
+// יוצרים את התיקיה קודם ומחכים לסיום לפני שמאפשרים העלאה
+async function prepareFolder() {
+  const res = await fetch('/api/upload', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderName })
+  });
+  if (!res.ok) throw new Error('Failed to prepare folder');
+  return res.json();
+}
+
+// לדוגמה, אפשר להפעיל בתחילת טעינת העמוד או לפני העלאת תמונה ראשונה
+prepareFolder().then(() => {
+  console.log('Folder ready for uploads');
+}).catch(err => {
+  alert('שגיאה בהכנת התיקיה: ' + err.message);
+});
 
     function updateTaskCounter() {
       const total = items.length;
