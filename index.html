@@ -15,6 +15,8 @@
     .add-image-btn:hover { transform: scale(1.2); }
     .add-image-btn img { width: 24px; height: 24px; filter: invert(100%); }
     .preview-img { width: 100px; height: 100px; object-fit: cover; margin: 5px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.2); }
+    .upload-status { margin-left: 10px; font-size: 20px; cursor: default; user-select: none; }
+    .upload-status button { margin-left: 8px; font-size: 14px; cursor: pointer; }
     #taskCounter { position: fixed; top: 20px; left: 20px; background: #2196f3; color: white; padding: 10px 20px; border-radius: 50px; font-size: 16px; z-index: 1000; }
     #progressOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
     #progressContainer { background: white; padding: 30px; border-radius: 15px; text-align: center; width: 90%; max-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
@@ -84,28 +86,23 @@
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
 
-   const now = new Date();
-document.getElementById("dateTime").value = now.toLocaleString();
+    const folderName = now.toISOString().split('T')[0];
 
-const folderName = now.toISOString().split('T')[0];
+    async function prepareFolder() {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName })
+      });
+      if (!res.ok) throw new Error('Failed to prepare folder');
+      return res.json();
+    }
 
-// יוצרים את התיקיה קודם ומחכים לסיום לפני שמאפשרים העלאה
-async function prepareFolder() {
-  const res = await fetch('/api/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ folderName })
-  });
-  if (!res.ok) throw new Error('Failed to prepare folder');
-  return res.json();
-}
-
-// לדוגמה, אפשר להפעיל בתחילת טעינת העמוד או לפני העלאת תמונה ראשונה
-prepareFolder().then(() => {
-  console.log('Folder ready for uploads');
-}).catch(err => {
-  alert('שגיאה בהכנת התיקיה: ' + err.message);
-});
+    prepareFolder().then(() => {
+      console.log('Folder ready for uploads');
+    }).catch(err => {
+      alert('שגיאה בהכנת התיקיה: ' + err.message);
+    });
 
     function updateTaskCounter() {
       const total = items.length;
@@ -126,7 +123,8 @@ prepareFolder().then(() => {
         addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png">';
         addBtn.onclick = () => addImage(idx); section.appendChild(addBtn);
         const imgContainer = document.createElement("div"); imgContainer.id = `imgContainer${idx}`;
-        section.appendChild(imgContainer); uploadedFiles[idx] = [];
+        section.appendChild(imgContainer); 
+        uploadedFiles[idx] = [];
       }
       checklistDiv.appendChild(section);
       document.getElementById(`item${idx}`).addEventListener("change", updateTaskCounter);
@@ -135,18 +133,73 @@ prepareFolder().then(() => {
     updateTaskCounter();
 
     async function addImage(idx) {
-      const input = document.createElement("input"); input.type = "file"; input.accept = "image/*"; input.capture = "environment";
-      input.onchange = async e => { const file = e.target.files[0]; if (file) {
-        const reader = new FileReader(); reader.onload = async () => {
-          const base64 = reader.result.split(',')[1];
-          const fileName = `item${idx}_image${uploadedFiles[idx].length+1}.jpg`;
-          await fetch('/api/upload', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ folderName, fileName, fileData: base64 }) });
-          uploadedFiles[idx].push(fileName);
-          const img = document.createElement("img"); img.src = reader.result; img.className = "preview-img";
-          document.getElementById(`imgContainer${idx}`).appendChild(img);
-          document.getElementById(`item${idx}`).checked = true; updateTaskCounter();
-        }; reader.readAsDataURL(file);
-      }}; input.click();
+      const input = document.createElement("input"); 
+      input.type = "file"; 
+      input.accept = "image/*"; 
+      input.capture = "environment";
+      
+      input.onchange = async e => { 
+        const file = e.target.files[0]; 
+        if (file) {
+          const reader = new FileReader(); 
+          reader.onload = async () => {
+            const base64 = reader.result.split(',')[1];
+            const fileName = `item${idx}_image${uploadedFiles[idx].length+1}.jpg`;
+
+            // שלב העלאת הקובץ עם בדיקת הצלחה / כשלון
+            try {
+              const res = await fetch('/api/upload', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'}, 
+                body: JSON.stringify({ folderName, fileName, fileData: base64 }) 
+              });
+
+              const imgContainer = document.getElementById(`imgContainer${idx}`);
+
+              if (res.ok) {
+                uploadedFiles[idx].push(fileName);
+
+                // הוספת התמונה ל־DOM
+                const img = document.createElement("img");
+                img.src = reader.result;
+                img.className = "preview-img";
+
+                // מנקים קודם כל ואז מוסיפים את התמונה והסטטוס
+                imgContainer.innerHTML = "";
+                imgContainer.appendChild(img);
+
+                // סימון הסעיף כסומן
+                document.getElementById(`item${idx}`).checked = true;
+                updateTaskCounter();
+
+                // סימן וי ירוק
+                const statusSpan = document.createElement("span");
+                statusSpan.className = "upload-status";
+                statusSpan.textContent = "✅";
+                imgContainer.appendChild(statusSpan);
+
+              } else {
+                // כשלון בהעלאה - מציג ❌ ונותן כפתור לנסות שוב
+                imgContainer.innerHTML = "";
+                const failSpan = document.createElement("span");
+                failSpan.className = "upload-status";
+                failSpan.textContent = "❌ העלאה נכשלה ";
+
+                const retryBtn = document.createElement("button");
+                retryBtn.textContent = "נסה שוב";
+                retryBtn.onclick = () => addImage(idx);
+
+                failSpan.appendChild(retryBtn);
+                imgContainer.appendChild(failSpan);
+              }
+            } catch (err) {
+              alert("שגיאה בהעלאת התמונה: " + err.message);
+            }
+          };
+          reader.readAsDataURL(file);
+        }
+      };
+      input.click();
     }
 
     function showProgress(stage, percent) {
@@ -156,10 +209,11 @@ prepareFolder().then(() => {
     }
     document.getElementById("checkForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-  /*
+      /*
       for (let i = 0; i < items.length; i++) {
-      if (items[i].requireImage && (!uploadedFiles[i] || uploadedFiles[i].length === 0)) {
-       alert(`נדרש לצרף לפחות תמונה אחת עבור: ${items[i].text}`); return;
+        if (items[i].requireImage && (!uploadedFiles[i] || uploadedFiles[i].length === 0)) {
+          alert(`נדרש לצרף לפחות תמונה אחת עבור: ${items[i].text}`);
+          return;
         }
       }
       */
@@ -173,7 +227,8 @@ prepareFolder().then(() => {
         btn.style.display = 'block';
         btn.onclick = () => window.open(`https://api.whatsapp.com/send?phone=972549090028&text=${encodeURIComponent("נוצר דוח חדש:\n" + link)}`,'_blank');
       } else {
-        alert("שגיאה ביצירת הדוח."); document.getElementById("progressOverlay").style.display = 'none';
+        alert("שגיאה ביצירת הדוח.");
+        document.getElementById("progressOverlay").style.display = 'none';
       }
     });
   </script>
