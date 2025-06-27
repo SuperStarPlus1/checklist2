@@ -1,6 +1,6 @@
 export const config = { runtime: "nodejs" };
 
-async function getDropboxAccessToken() {
+export async function getDropboxAccessToken() {
   const params = new URLSearchParams();
   params.append('grant_type', 'refresh_token');
   params.append('refresh_token', process.env.DROPBOX_REFRESH_TOKEN);
