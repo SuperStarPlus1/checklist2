@@ -1,6 +1,9 @@
-export const config = { runtime: "nodejs" };
+const fetch = require('node-fetch');
+const { URLSearchParams } = require('url');
 
-export async function getDropboxAccessToken() {
+const config = { runtime: "nodejs" };
+
+async function getDropboxAccessToken() {
   const params = new URLSearchParams();
   params.append('grant_type', 'refresh_token');
   params.append('refresh_token', process.env.DROPBOX_REFRESH_TOKEN);
@@ -25,3 +28,5 @@ export async function getDropboxAccessToken() {
   const data = await res.json();
   return data.access_token;
 }
+
+module.exports = { config, getDropboxAccessToken };
