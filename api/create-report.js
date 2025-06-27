@@ -54,12 +54,28 @@ export default async function handler(req, res) {
     }
 
     const DROPBOX_TOKEN = await getDropboxAccessToken();
+
+    const logoPath = `/forms/logo.png`; // הלוגו נמצא בתיקיה forms בשורש דרופבוקס
+
+    // הורדת הלוגו פעם אחת כ-base64
+    let base64Logo = null;
+    try {
+      base64Logo = await downloadFileAsBase64(DROPBOX_TOKEN, logoPath);
+    } catch {
+      console.warn('Logo image not found in Dropbox, skipping logo display');
+      base64Logo = null;
+    }
+
     const reportLines = [];
+
+    reportLines.push(`<table>`);
+    reportLines.push(`<thead><tr><th style="text-align:right">משימה</th><th>סטטוס</th><th>תמונות</th></tr></thead>`);
+    reportLines.push(`<tbody>`);
 
     for (const section of sections) {
       const status = section.done ? '✅' : '❌';
-      reportLines.push(`<h3 style="text-align:right;">${status} ${section.text}</h3>`);
 
+      let imagesHtml = '';
       if (section.requireImage) {
         if (section.images && section.images.length > 0) {
           const imgsHtml = [];
@@ -76,15 +92,31 @@ export default async function handler(req, res) {
             }
           }
           if (imgsHtml.length > 0) {
-            reportLines.push(`<div style="display:flex; justify-content:flex-start; direction:ltr;">${imgsHtml.join('')}</div>`);
-          } else {
-            reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
+            imagesHtml = `<div style="display:flex; gap:10px;">${imgsHtml.join('')}</div>`;
+          } else if (base64Logo) {
+            // הצגת לוגו חלופי אם אין תמונות
+            imagesHtml = `<img src="data:image/png;base64,${base64Logo}" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px; border:1px solid #666; border-radius:8px;" />`;
           }
-        } else {
-          reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
+        } else if (base64Logo) {
+          // סעיף עם דרישת תמונה אבל אין תמונות בכלל - מציג לוגו
+          imagesHtml = `<img src="data:image/png;base64,${base64Logo}" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px; border:1px solid #666; border-radius:8px;" />`;
         }
+      } else {
+        // סעיף ללא דרישת תמונה - אין תמונות להצגה
+        imagesHtml = '';
       }
+
+      reportLines.push(`
+        <tr>
+          <td style="text-align: right; direction: rtl;">${section.text}</td>
+          <td style="text-align: center;">${status}</td>
+          <td style="text-align: center;">${imagesHtml}</td>
+        </tr>
+      `);
     }
+
+    reportLines.push(`</tbody>`);
+    reportLines.push(`</table>`);
 
     const html = `
       <html lang="he" dir="rtl">
@@ -94,10 +126,10 @@ export default async function handler(req, res) {
         <style>
           body { font-family: Arial, sans-serif; direction: rtl; padding: 20px; }
           h2, h3 { text-align: right; }
-          div.images-row { display: flex; gap: 10px; }
-          img { border-radius: 8px; border: 1px solid #ccc; width: 120px; height: 120px; object-fit: cover; }
           table { width: 100%; border-collapse: collapse; margin-top: 20px; }
           td, th { border: 1px solid #666; padding: 8px; text-align: right; }
+          img { border-radius: 8px; border: 1px solid #ccc; width: 120px; height: 120px; object-fit: cover; }
+          div.images-row { display: flex; gap: 10px; }
         </style>
       </head>
       <body>
@@ -109,6 +141,7 @@ export default async function handler(req, res) {
       </html>
     `;
 
+    // שמירת הדוח בתיקיית הפרויקט בדרופבוקס
     const filename = `report_${folderName}.html`;
     const uploadResponse = await fetch("https://content.dropboxapi.com/2/files/upload", {
       method: "POST",
@@ -122,7 +155,7 @@ export default async function handler(req, res) {
           mute: false,
         }),
       },
-      body: Buffer.from(html, 'utf-8'),
+      body: Buffer.from(html),
     });
 
     if (!uploadResponse.ok) {
@@ -131,6 +164,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Failed to upload report" });
     }
 
+    // יצירת קישור שיתוף
     const shareResponse = await fetch("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings", {
       method: "POST",
       headers: {
