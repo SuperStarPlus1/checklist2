@@ -10,19 +10,21 @@ export default async function handler(req, res) {
     const reportLines = [];
 
     for (const section of sections) {
-      reportLines.push(`<h3>${section.done ? '✅' : '❌'} ${section.text}</h3>`);
-      for (const file of section.images || []) {
-        const imagePath = `/forms/${folderName}/${file}`;
-        let base64Image;
-        try {
-          base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, imagePath);
-        } catch {
-          base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, "/forms/logo.png");
-        }
-        reportLines.push(`<img src="data:image/jpeg;base64,${base64Image}" class="photo" />`);
-      }
+      const status = section.done ? '✅' : '❌';
+      reportLines.push(`<h3>${status} ${section.text}</h3>`);
 
-      if ((section.images || []).length === 0 && section.text.includes('תמונה')) {
+      if (section.images && section.images.length > 0) {
+        for (const file of section.images) {
+          const imagePath = `/forms/${folderName}/${file}`;
+          let base64Image;
+          try {
+            base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, imagePath);
+          } catch {
+            base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, "/forms/logo.png");
+          }
+          reportLines.push(`<img src="data:image/jpeg;base64,${base64Image}" class="photo" />`);
+        }
+      } else if (section.text.includes('תמונה')) {
         const fallback = await downloadFileAsBase64(DROPBOX_TOKEN, "/forms/logo.png");
         reportLines.push(`<img src="data:image/jpeg;base64,${fallback}" class="photo" />`);
       }
@@ -60,7 +62,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to upload report', details: errText });
     }
 
-    // Get sharable link
     const shareRes = await fetch("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings", {
       method: "POST",
       headers: {
