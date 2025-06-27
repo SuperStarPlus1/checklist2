@@ -1,120 +1,134 @@
+import { getDropboxAccessToken } from './share-report.js';
+
 export const config = { runtime: "nodejs" };
 
-async function getDropboxAccessToken() {
-  const params = new URLSearchParams();
-  params.append('grant_type', 'refresh_token');
-  params.append('refresh_token', process.env.DROPBOX_REFRESH_TOKEN);
-
-  const res = await fetch('https://api.dropboxapi.com/oauth2/token', {
-    method: 'POST',
+// פונקציה לקבלת קישור שיתוף ישיר ל-dropbox path
+async function getSharedLink(token, path) {
+  // מנסה ליצור קישור שיתוף
+  const res = await fetch("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings", {
+    method: "POST",
     headers: {
-      'Authorization': 'Basic ' + Buffer.from(
-        `${process.env.DROPBOX_APP_KEY}:${process.env.DROPBOX_APP_SECRET}`
-      ).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded'
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
     },
-    body: params
+    body: JSON.stringify({ path, settings: { requested_visibility: "public" } })
   });
 
   if (!res.ok) {
-    const error = await res.text();
-    throw new Error('Cannot refresh Dropbox token: ' + error);
+    // אם הקישור כבר קיים או שגיאה, מנסה לקבל קישורים קיימים
+    const listRes = await fetch("https://api.dropboxapi.com/2/sharing/list_shared_links", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ path })
+    });
+    if (!listRes.ok) return null;
+    const data = await listRes.json();
+    if (data.links && data.links.length > 0) {
+      return data.links[0].url.replace("?dl=0", "?raw=1");
+    }
+    return null;
   }
 
   const data = await res.json();
-  return data.access_token;
-}
-
-async function downloadFileAsBase64(DROPBOX_TOKEN, path) {
-  const res = await fetch("https://content.dropboxapi.com/2/files/download", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${DROPBOX_TOKEN}`,
-      "Dropbox-API-Arg": JSON.stringify({ path })
-    }
-  });
-
-  if (!res.ok) {
-    throw new Error("Cannot download file: " + path);
-  }
-
-  const arrayBuffer = await res.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return buffer.toString('base64');
+  return data.url.replace("?dl=0", "?raw=1");
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { folderName, employeeName, sections } = req.body;
-  if (!folderName || !employeeName || !sections) {
-    return res.status(400).json({ error: 'Missing data' });
-  }
+  try {
+    const { folderName, employeeName, sections } = req.body;
+    const DROPBOX_TOKEN = await getDropboxAccessToken();
 
-  const DROPBOX_TOKEN = await getDropboxAccessToken();
-  const basePath = `/forms/${folderName}`;
+    const reportLines = [];
 
-  // נביא את הלוגו פעם אחת בתחילת בניית הדוח
-  const logoBase64 = await downloadFileAsBase64(DROPBOX_TOKEN, `/forms/logo.png`);
+    for (const section of sections) {
+      const status = section.done ? '✅' : '❌';
+      reportLines.push(`<h3>${status} ${section.text}</h3>`);
 
-  let html = `
-  <html lang="he" dir="rtl"><head><meta charset="UTF-8"><title>דוח</title>
-  <style>
-    body { font-family: sans-serif; text-align:center; direction:rtl; }
-    table { width: 90%; border-collapse: collapse; margin: auto; margin-top: 20px; }
-    th, td { border: 1px solid #aaa; padding: 10px; text-align: center; }
-    .done { color: green; font-weight: bold; }
-    .fail { color: red; font-weight: bold; }
-    img.logo { width: 150px; margin-top: 20px; }
-    img.photo { width:150px; margin:5px; border: 1px solid #ccc; }
-  </style></head><body>
-  <img src="data:image/png;base64,${logoBase64}" class="logo">
-  <h2>דוח סגירת סניף</h2>
-  <p><b>שם עובד:</b> ${employeeName}</p>
-  <table><tr><th>סטטוס</th><th>סעיף</th></tr>`;
+      if (section.images && section.images.length > 0) {
+        for (const file of section.images) {
+          const imagePath = `/forms/${folderName}/${file}`;
+          const fallbackLink = await getSharedLink(DROPBOX_TOKEN, "/forms/logo.png");
+          let realLink = await getSharedLink(DROPBOX_TOKEN, imagePath);
+          if (!realLink) realLink = fallbackLink;
 
-  for (const item of sections) {
-    html += `<tr><td class="${item.done ? 'done' : 'fail'}">${item.done ? 'בוצע' : 'לא בוצע'}</td><td>${item.text}</td></tr>`;
-    if (item.images && item.images.length > 0) {
-      html += `<tr><td colspan="2">`;
-      for (const img of item.images) {
-        const imagePath = `${basePath}/${img}`;
-        const base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, imagePath);
-        html += `<img src="data:image/jpeg;base64,${base64Image}" class="photo">`;
+          reportLines.push(`
+            <img 
+              src="${fallbackLink}" 
+              data-real-src="${realLink}" 
+              class="photo" 
+              onerror="this.onerror=null;this.src='${fallbackLink}';"
+            />
+          `);
+        }
+      } else if (section.text.includes('תמונה')) {
+        // מציגים תמונה חליפית אם אין תמונות בכלל בסעיף שדורש תמונה
+        const fallbackLink = await getSharedLink(DROPBOX_TOKEN, "/forms/logo.png");
+        reportLines.push(`<img src="${fallbackLink}" class="photo" />`);
       }
-      html += `</td></tr>`;
     }
+
+    const html = `
+      <html lang="he" dir="rtl">
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; direction: rtl; padding: 10px; }
+          .photo { width: 100%; max-width: 400px; margin: 10px auto; display: block; border-radius: 8px; box-shadow: 0 0 5px rgba(0,0,0,0.3); }
+          h2 { text-align: center; }
+          h3 { margin-top: 25px; }
+        </style>
+      </head>
+      <body>
+        <h2>דוח סגירת סניף</h2>
+        <p><strong>עובד:</strong> ${employeeName}</p>
+        <p><strong>תאריך:</strong> ${new Date().toLocaleString('he-IL')}</p>
+        ${reportLines.join("\n")}
+        
+        <script>
+          // סקריפט להחלפת תמונות חלופיות לתמונות אמיתיות אם הן זמינות
+          document.querySelectorAll('img[data-real-src]').forEach(img => {
+            const realSrc = img.getAttribute('data-real-src');
+            const testImg = new Image();
+            testImg.onload = () => { img.src = realSrc; };
+            testImg.onerror = () => { /* נשאר עם החליפית */ };
+            testImg.src = realSrc;
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    const filename = `report_${folderName}.html`;
+    const upload = await fetch("https://content.dropboxapi.com/2/files/upload", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${DROPBOX_TOKEN}`,
+        "Content-Type": "application/octet-stream",
+        "Dropbox-API-Arg": JSON.stringify({
+          path: `/forms/${folderName}/${filename}`,
+          mode: "overwrite",
+          autorename: true,
+          mute: false
+        })
+      },
+      body: Buffer.from(html)
+    });
+
+    if (!upload.ok) {
+      const errText = await upload.text();
+      return res.status(500).json({ error: 'Failed to upload report', details: errText });
+    }
+
+    const shareLink = await getSharedLink(DROPBOX_TOKEN, `/forms/${folderName}/${filename}`);
+    res.status(200).json({ link: shareLink });
+
+  } catch (err) {
+    console.error("Report Error:", err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
-
-  html += `</table></body></html>`;
-
-  // מעלה את הדוח עצמו לדרופבוקס
-  await fetch("https://content.dropboxapi.com/2/files/upload", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${DROPBOX_TOKEN}`,
-      "Content-Type": "application/octet-stream",
-      "Dropbox-API-Arg": JSON.stringify({
-        path: `${basePath}/report.html`,
-        mode: "overwrite",
-        autorename: false
-      })
-    },
-    body: Buffer.from(html, 'utf8')
-  });
-
-  // יוצר לינק שיתוף לדוח עצמו
-  const shareResp = await fetch("https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${DROPBOX_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ path: `${basePath}/report.html` })
-  });
-
-  const shareData = await shareResp.json();
-  const finalLink = shareData.url.replace("?dl=0", "?raw=1");
-
-  res.status(200).json({ link: finalLink });
 }
