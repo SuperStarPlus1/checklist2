@@ -26,6 +26,51 @@ async function getDropboxAccessToken() {
   return data.access_token;
 }
 
+// פונקציה רקורסיבית לשינוי שם תיקיה קיימת
+async function renameExistingFolder(oldPath, version = 1) {
+  const newPath = `${oldPath}_ver${version}`;
+
+  // בודקים אם התיקיה החדשה קיימת
+  const DROPBOX_TOKEN = await getDropboxAccessToken();
+  const checkResp = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${DROPBOX_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ path: newPath })
+  });
+
+  if (checkResp.ok) {
+    // אם קיימת, מנסים שוב עם מספר גרסה גבוה יותר
+    return renameExistingFolder(oldPath, version + 1);
+  } else if (checkResp.status === 409) {
+    // לא קיימת - נשנה את שם התיקיה הקיימת ל-newPath
+    const moveResp = await fetch("https://api.dropboxapi.com/2/files/move_v2", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${DROPBOX_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        from_path: oldPath,
+        to_path: newPath,
+        autorename: false
+      })
+    });
+
+    if (!moveResp.ok) {
+      const errText = await moveResp.text();
+      throw new Error("Failed to rename existing folder: " + errText);
+    }
+
+    return newPath;
+  } else {
+    const errText = await checkResp.text();
+    throw new Error("Error checking folder existence: " + errText);
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -42,7 +87,7 @@ export default async function handler(req, res) {
     const DROPBOX_TOKEN = await getDropboxAccessToken();
 
     if (!fileName && !fileData) {
-      // שלב יצירת תיקיה בלבד
+      // שלב יצירת תיקיה בלבד - בודקים אם קיימת תיקיה בשם הזה
       const checkResp = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
         method: "POST",
         headers: {
@@ -52,36 +97,40 @@ export default async function handler(req, res) {
         body: JSON.stringify({ path: basePath })
       });
 
+      let finalPath = basePath;
+
       if (checkResp.ok) {
-        // מחק תיקיה קיימת אם קיימת
-        await fetch("https://api.dropboxapi.com/2/files/delete_v2", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${DROPBOX_TOKEN}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ path: basePath })
-        });
+        // התיקיה קיימת - משנים לה את השם (לא מוחקים)
+        finalPath = await renameExistingFolder(basePath);
+      } else if (checkResp.status !== 409) {
+        // שגיאה אחרת
+        const errText = await checkResp.text();
+        throw new Error("Error checking folder existence: " + errText);
       }
 
-      // צור תיקיה חדשה
-      await fetch("https://api.dropboxapi.com/2/files/create_folder_v2", {
+      // צור תיקיה חדשה בשם finalPath (שיכול להיות basePath או שם חדש)
+      const createResp = await fetch("https://api.dropboxapi.com/2/files/create_folder_v2", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${DROPBOX_TOKEN}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ path: basePath, autorename: false })
+        body: JSON.stringify({ path: finalPath, autorename: false })
       });
 
-      return res.status(200).json({ message: "Folder prepared" });
+      if (!createResp.ok) {
+        const err = await createResp.text();
+        throw new Error("Failed to create folder: " + err);
+      }
+
+      return res.status(200).json({ folderPath: finalPath });
     }
 
     if (!fileName || !fileData) {
       return res.status(400).json({ error: 'Missing fileName or fileData' });
     }
 
-    // המרת base64 ל-buffer
+    // העלאת קובץ לתיקיה
     const fileBuffer = Buffer.from(fileData, 'base64');
 
     const uploadResp = await fetch("https://content.dropboxapi.com/2/files/upload", {
