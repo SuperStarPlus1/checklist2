@@ -144,6 +144,11 @@
         if (file) {
           const reader = new FileReader();
           reader.onload = async () => {
+            if (uploadedFiles[idx].length >= 9) {
+              alert("הגעת למספר התמונות המרבי לסעיף (9)");
+              return;
+            }
+
             const base64 = reader.result.split(',')[1];
             const fileName = `item${idx}_image${uploadedFiles[idx].length + 1}.jpg`;
 
@@ -159,23 +164,27 @@
               if (res.ok) {
                 uploadedFiles[idx].push(fileName);
 
+                // הוספת התמונה החדשה מבלי לנקות את המיכל
                 const img = document.createElement("img");
                 img.src = reader.result;
                 img.className = "preview-img";
 
-                imgContainer.innerHTML = "";
                 imgContainer.appendChild(img);
 
+                // סימון הסעיף כסומן
                 document.getElementById(`item${idx}`).checked = true;
                 updateTaskCounter();
 
-                const statusSpan = document.createElement("span");
-                statusSpan.className = "upload-status";
-                statusSpan.textContent = "✅";
-                imgContainer.appendChild(statusSpan);
+                // בדוק אם יש כבר סטטוס ✅, אם לא - הוסף
+                if (!imgContainer.querySelector(".upload-status")) {
+                  const statusSpan = document.createElement("span");
+                  statusSpan.className = "upload-status";
+                  statusSpan.textContent = "✅";
+                  imgContainer.appendChild(statusSpan);
+                }
 
               } else {
-                imgContainer.innerHTML = "";
+                // כשלון בהעלאה - מציג ❌ ונותן כפתור לנסות שוב
                 const failSpan = document.createElement("span");
                 failSpan.className = "upload-status";
                 failSpan.textContent = "❌ העלאה נכשלה ";
