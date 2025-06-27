@@ -49,7 +49,7 @@
     <button type="submit" style="margin-top:20px; padding: 10px 30px; font-size: 18px; background-color:#2196f3; color:white; border:none; border-radius:8px;">שלח טופס בקרה</button>
   </form>
 
-  <input type="file" id="fileInput" accept="image/*" capture="environment" style="margin-top:10px;"/>
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none" />
 
   <script>
     const items = [
@@ -82,14 +82,12 @@
       { text: "לוודא שאין הפרעה לתריס הראשי. לסגור את התריס ולוודא שנסגר עד הסוף", requireImage: true }
     ];
 
-    let folderPath = null;
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
+    const checkboxElements = {};
 
-    // הצגת תאריך ושעה
     document.getElementById("dateTime").value = new Date().toLocaleString();
 
-    // טוען את הסעיפים לטופס
     function loadChecklist() {
       checklistDiv.innerHTML = "";
       items.forEach((item, idx) => {
@@ -99,7 +97,19 @@
 
         const textContainer = document.createElement("div");
         textContainer.className = "text-container";
-        textContainer.textContent = item.text;
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.id = `item${idx}`;
+        checkbox.checked = false;
+        checkboxElements[idx] = checkbox;
+
+        const label = document.createElement("label");
+        label.htmlFor = `item${idx}`;
+        label.textContent = item.text;
+
+        textContainer.appendChild(checkbox);
+        textContainer.appendChild(label);
         section.appendChild(textContainer);
 
         if (item.requireImage) {
@@ -109,25 +119,25 @@
           btn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" alt="הוסף תמונה">';
           btn.onclick = () => openFileDialog(idx);
           section.appendChild(btn);
+          uploadedFiles[idx] = [];
         }
 
         checklistDiv.appendChild(section);
-        uploadedFiles[idx] = [];
+
+        checkbox.addEventListener('change', updateTaskCounter);
       });
       updateTaskCounter();
     }
 
-    // עדכון מונה המשימות שנותרו
     function updateTaskCounter() {
       const total = items.length;
       let doneCount = 0;
       for (let i = 0; i < total; i++) {
-        if (uploadedFiles[i].length > 0 || !items[i].requireImage) doneCount++;
+        if (checkboxElements[i].checked || !items[i].requireImage) doneCount++;
       }
       document.getElementById("taskCounter").textContent = `משימות שנותרו: ${total - doneCount}`;
     }
 
-    // פתיחת דיאלוג לבחירת קובץ
     function openFileDialog(idx) {
       const input = document.getElementById("fileInput");
       input.dataset.idx = idx;
@@ -135,7 +145,6 @@
       input.click();
     }
 
-    // המרת קובץ ל־Base64
     function fileToBase64(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -145,7 +154,8 @@
       });
     }
 
-    // יצירת תיקיה פעם אחת בלבד
+    let folderPath = null;
+
     async function createFolderOnce(folderName) {
       if (folderPath) return folderPath;
       const res = await fetch('/api/upload', {
@@ -159,7 +169,6 @@
       return folderPath;
     }
 
-    // העלאת קובץ
     async function uploadFile(file, idx) {
       if (!folderPath) throw new Error('Folder not created yet');
       const base64 = await fileToBase64(file);
@@ -175,25 +184,11 @@
       }
       const data = await res.json();
       uploadedFiles[idx].push(data.fileName);
-      markSectionDone(idx);
+      checkboxElements[idx].checked = true;
       updateTaskCounter();
       return data;
     }
 
-    // סימון סעיף כהושלם (✅)
-    function markSectionDone(idx) {
-      const section = document.getElementById(`section${idx}`);
-      if (!section) return;
-      if (!section.querySelector('.done-mark')) {
-        const mark = document.createElement('span');
-        mark.textContent = '✅';
-        mark.className = 'done-mark';
-        mark.style.marginRight = '10px';
-        section.querySelector('.text-container').prepend(mark);
-      }
-    }
-
-    // אירוע בחירת קובץ מהקלט
     document.getElementById('fileInput').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
