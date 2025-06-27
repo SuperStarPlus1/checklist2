@@ -13,40 +13,66 @@ export default async function handler(req, res) {
 
     if (!finalPathCache) {
       const basePath = `/forms/${folderName}`;
+      let existingFolder = true;
       let finalPath = basePath;
       let version = 1;
 
-      while (true) {
-        const checkResp = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
+      // Check if folder exists
+      const checkResp = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${DROPBOX_TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ path: basePath })
+      });
+
+      if (checkResp.status === 409) {
+        existingFolder = false; // doesn't exist
+      } else if (!checkResp.ok) {
+        const errorText = await checkResp.text();
+        console.error("get_metadata error:", errorText);
+        throw new Error("שגיאה בבדיקת שם תיקיה");
+      }
+
+      if (existingFolder) {
+        // rename existing folder to _ver1/_ver2...
+        let newName;
+        while (true) {
+          newName = `${basePath}_ver${version}`;
+          const checkNew = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${DROPBOX_TOKEN}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ path: newName })
+          });
+          if (checkNew.status === 409) break;
+          version++;
+        }
+
+        await fetch("https://api.dropboxapi.com/2/files/move_v2", {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${DROPBOX_TOKEN}`,
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({ path: finalPath })
+          body: JSON.stringify({ from_path: basePath, to_path: newName })
         });
-
-        if (checkResp.status === 409) break;
-        if (!checkResp.ok) {
-          const errorText = await checkResp.text();
-          console.error("get_metadata error:", errorText);
-          throw new Error("שגיאה בבדיקת שם תיקיה");
-        }
-
-        finalPath = `${basePath}_ver${version}`;
-        version++;
       }
 
+      // create the new folder
       await fetch("https://api.dropboxapi.com/2/files/create_folder_v2", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${DROPBOX_TOKEN}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ path: finalPath, autorename: false })
+        body: JSON.stringify({ path: basePath, autorename: false })
       });
 
-      finalPathCache = finalPath;
+      finalPathCache = basePath;
     }
 
     const uploadResp = await fetch("https://content.dropboxapi.com/2/files/upload", {
