@@ -58,6 +58,19 @@
       height: 24px;
       filter: invert(100%);
     }
+    /* מצב טעינה */
+    .add-image-btn.uploading {
+      pointer-events: none;
+      opacity: 0.6;
+    }
+    .add-image-btn.uploading img {
+      filter: none;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
     .preview-img {
       width: 100px;
       height: 100px;
@@ -150,6 +163,21 @@
       cursor: pointer;
       display: none;
     }
+    /* סגנון כפתור סגור חדש */
+    #closeProgressBtn {
+      background-color: #ff3b30; /* אדום cancel */
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 50px;
+      font-size: 18px;
+      cursor: pointer;
+      margin-left: 10px;
+      transition: background-color 0.3s ease;
+    }
+    #closeProgressBtn:hover {
+      background-color: #d32f2f;
+    }
     @keyframes pulse {
       0% { box-shadow: 0 0 5px yellow; }
       50% { box-shadow: 0 0 15px yellow; }
@@ -221,7 +249,6 @@
 
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
-    const uploadStatus = {}; // ניהול סטטוס העלאות, לפי סעיף ותמונה
 
     const folderName = now.toISOString().split("T")[0];
 
@@ -247,17 +274,9 @@
       const total = items.length;
       let done = 0;
       for (let i = 0; i < total; i++) {
-        if (document.getElementById(`item${i}`).checked) done++;
+        if (document.getElementById(`item${i}`)?.checked) done++;
       }
       document.getElementById("taskCounter").innerText = `משימות שנותרו: ${total - done}`;
-    }
-
-    function updateSubmitButtonState() {
-      const submitBtn = document.querySelector("#checkForm button[type=submit]");
-      const hasUploadingOrFailed = Object.values(uploadStatus).some(statusArray =>
-        statusArray.some(status => status === 'uploading' || status === 'failed')
-      );
-      submitBtn.disabled = hasUploadingOrFailed;
     }
 
     items.forEach((item, idx) => {
@@ -283,7 +302,6 @@
         section.appendChild(imgContainer);
 
         uploadedFiles[idx] = [];
-        uploadStatus[idx] = [];
       }
 
       checklistDiv.appendChild(section);
@@ -291,11 +309,10 @@
     });
 
     updateTaskCounter();
-    updateSubmitButtonState();
 
-    async function uploadFile(idx, file, imageIndex) {
-      uploadStatus[idx][imageIndex] = 'uploading';
-      updateSubmitButtonState();
+    async function uploadFile(idx, file) {
+      const addBtn = document.querySelector(`#item${idx}`).closest('.section').querySelector('.add-image-btn');
+      addBtn.classList.add('uploading');
 
       const reader = new FileReader();
       reader.onload = async () => {
@@ -314,14 +331,10 @@
           if (res.ok) {
             uploadedFiles[idx].push(fileName);
 
-            // ניקוי והצגה מחדש של כל התמונות לסעיף
-            imgContainer.innerHTML = "";
-            for (let i = 0; i < uploadedFiles[idx].length; i++) {
-              const img = document.createElement("img");
-              img.src = URL.createObjectURL(await file.slice(0)); // נשתמש בקובץ שנשלח
-              img.className = "preview-img";
-              imgContainer.appendChild(img);
-            }
+            const img = document.createElement("img");
+            img.src = reader.result;
+            img.className = "preview-img";
+            imgContainer.appendChild(img);
 
             document.getElementById(`item${idx}`).checked = true;
             updateTaskCounter();
@@ -330,15 +343,10 @@
             statusSpan.className = "upload-status";
             statusSpan.textContent = "✅";
             imgContainer.appendChild(statusSpan);
-
-            uploadStatus[idx][imageIndex] = 'success';
-            updateSubmitButtonState();
-
           } else {
             throw new Error("העלאה נכשלה");
           }
         } catch (err) {
-          imgContainer.innerHTML = "";
           const failSpan = document.createElement("span");
           failSpan.className = "upload-status";
           failSpan.style.color = "red";
@@ -347,16 +355,13 @@
           const retryBtn = document.createElement("button");
           retryBtn.textContent = "נסה שוב";
           retryBtn.onclick = () => {
-            uploadStatus[idx][imageIndex] = 'uploading';
-            updateSubmitButtonState();
-            uploadFile(idx, file, imageIndex);
+            uploadFile(idx, file); // מעלה שוב את אותו הקובץ בלי לבחור שוב
           };
 
           failSpan.appendChild(retryBtn);
           imgContainer.appendChild(failSpan);
-
-          uploadStatus[idx][imageIndex] = 'failed';
-          updateSubmitButtonState();
+        } finally {
+          addBtn.classList.remove('uploading');
         }
       };
       reader.readAsDataURL(file);
@@ -377,24 +382,35 @@
           return;
         }
 
-        // מוסיף סטטוס חדש במערך העלאות לסעיף
-        const imageIndex = uploadStatus[idx].length;
-        uploadStatus[idx][imageIndex] = 'uploading';
-
-        await uploadFile(idx, file, imageIndex);
+        await uploadFile(idx, file);
       };
       input.click();
     }
 
+    function showProgress(stage, percent) {
+      document.getElementById("progressOverlay").style.display = "flex";
+      document.getElementById("progressText").innerText = stage;
+      document.getElementById("progressBar").style.width = percent + "%";
+    }
+
     document.getElementById("checkForm").addEventListener("submit", async (e) => {
       e.preventDefault();
+
+      /*
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].requireImage && (!uploadedFiles[i] || uploadedFiles[i].length === 0)) {
+          alert(`נדרש לצרף לפחות תמונה אחת עבור: ${items[i].text}`);
+          return;
+        }
+      }
+      */
 
       showProgress("יוצר דוח...", 80);
       const sections = items.map((item, idx) => ({
         text: item.text,
         done: document.getElementById(`item${idx}`).checked,
         images: uploadedFiles[idx] || [],
-        requireImage: item.requireImage, // מוסיף את השדה לשרת
+        requireImage: item.requireImage,
       }));
 
       const reportRes = await fetch("/api/create-report", {
@@ -420,10 +436,17 @@
         if (!closeBtn) {
           closeBtn = document.createElement("button");
           closeBtn.id = "closeProgressBtn";
-          closeBtn.textContent = "❌ סגור";
+          closeBtn.textContent = "סגור ללא שליחה";
           closeBtn.style.marginLeft = "10px";
           closeBtn.style.fontSize = "20px";
           closeBtn.style.cursor = "pointer";
+          closeBtn.style.backgroundColor = "#ff3b30";
+          closeBtn.style.color = "white";
+          closeBtn.style.border = "none";
+          closeBtn.style.borderRadius = "50px";
+          closeBtn.style.padding = "10px 20px";
+          closeBtn.onmouseenter = () => closeBtn.style.backgroundColor = "#d32f2f";
+          closeBtn.onmouseleave = () => closeBtn.style.backgroundColor = "#ff3b30";
           closeBtn.onclick = () => {
             document.getElementById("progressOverlay").style.display = "none";
           };
@@ -445,13 +468,6 @@
         document.getElementById("progressOverlay").style.display = "none";
       }
     });
-
-    function showProgress(stage, percent) {
-      document.getElementById("progressOverlay").style.display = "flex";
-      document.getElementById("progressText").innerText = stage;
-      document.getElementById("progressBar").style.width = percent + "%";
-    }
-
   </script>
 </body>
 </html>
