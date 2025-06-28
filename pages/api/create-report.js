@@ -40,7 +40,6 @@ export default async function handler(req, res) {
         if (section.images && section.images.length > 0) {
           const imgsHtml = [];
           for (let i = 0; i < Math.min(3, section.images.length); i++) {
-            // נתיב התמונה בתוך תיקיית super
             const imagePath = `/forms/super/${folderName}/${section.images[i]}`;
             let base64Image;
             try {
@@ -55,7 +54,6 @@ export default async function handler(req, res) {
           if (imgsHtml.length > 0) {
             reportLines.push(`<div style="display:flex; justify-content:flex-start; direction:ltr;">${imgsHtml.join('')}</div>`);
           } else {
-            // לוגו אם אין תמונות
             reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
           }
         } else {
@@ -87,7 +85,8 @@ export default async function handler(req, res) {
       </html>
     `;
 
-    const filename = `report_${folderName}.html`;
+    // שמירת הדוח בשם קבוע report.html בתיקיית folderName שנבחרה
+    const filename = `report.html`;
 
     const uploadResponse = await fetch("https://content.dropboxapi.com/2/files/upload", {
       method: "POST",
@@ -95,7 +94,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${DROPBOX_TOKEN}`,
         "Content-Type": "application/octet-stream",
         "Dropbox-API-Arg": JSON.stringify({
-          path: `/forms/super/${folderName}/${filename}`,
+          path: `/forms/super/${folderName}/${filename}`, // שומר בתוך התיקיה הקיימת
           mode: "overwrite",
           autorename: false,
           mute: false,
