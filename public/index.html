@@ -58,18 +58,11 @@
       height: 24px;
       filter: invert(100%);
     }
-    /* מצב טעינה */
-    .add-image-btn.uploading {
-      pointer-events: none;
-      opacity: 0.6;
-    }
-    .add-image-btn.uploading img {
-      filter: none;
-      animation: spin 1s linear infinite;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg);}
-      100% { transform: rotate(360deg);}
+    .uploading-text {
+      font-size: 14px;
+      color: #555;
+      font-weight: bold;
+      padding: 0 10px;
     }
     .preview-img {
       width: 100px;
@@ -163,21 +156,6 @@
       cursor: pointer;
       display: none;
     }
-    /* סגנון כפתור סגור חדש */
-    #closeProgressBtn {
-      background-color: #ff3b30; /* אדום cancel */
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 50px;
-      font-size: 18px;
-      cursor: pointer;
-      margin-left: 10px;
-      transition: background-color 0.3s ease;
-    }
-    #closeProgressBtn:hover {
-      background-color: #d32f2f;
-    }
     @keyframes pulse {
       0% { box-shadow: 0 0 5px yellow; }
       50% { box-shadow: 0 0 15px yellow; }
@@ -186,6 +164,12 @@
   </style>
 </head>
 <body>
+  <script>
+    // התראה בפתיחת הטופס
+    window.onload = function() {
+      alert("לביצועים מיטביים עדיף להתחבר לרשת האלחוטית. ללא חיבור תיתכן איטיות בטעינת תמונות");
+    }
+  </script>
   <div id="taskCounter">משימות שנותרו: 0</div>
   <div id="progressOverlay">
     <div id="progressContainer">
@@ -311,15 +295,23 @@
     updateTaskCounter();
 
     async function uploadFile(idx, file) {
-      const addBtn = document.querySelector(`#item${idx}`).closest('.section').querySelector('.add-image-btn');
-      addBtn.classList.add('uploading');
-
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = reader.result.split(",")[1];
         const fileName = `item${idx}_image${uploadedFiles[idx].length + 1}.jpg`;
 
         const imgContainer = document.getElementById(`imgContainer${idx}`);
+
+        // לפני ההעלאה - ניקוי הודעות שגיאה קודמות והצגת טקסט "בתמונה בהעלאה"
+        const oldFailSpan = imgContainer.querySelector(".upload-status");
+        if (oldFailSpan) oldFailSpan.remove();
+
+        // מחליף את כפתור הוספת תמונה לטקסט העלאה
+        const addBtn = imgContainer.previousSibling; // הכפתור הוא אחות קודמת
+        if (addBtn && addBtn.classList.contains("add-image-btn")) {
+          addBtn.disabled = true;
+          addBtn.innerHTML = '<span class="uploading-text">בתמונה בהעלאה אנא המתן...</span>';
+        }
 
         try {
           const res = await fetch("/api/upload", {
@@ -334,19 +326,33 @@
             const img = document.createElement("img");
             img.src = reader.result;
             img.className = "preview-img";
+
             imgContainer.appendChild(img);
 
             document.getElementById(`item${idx}`).checked = true;
             updateTaskCounter();
 
+            // הסרת הודעות שגיאה ויצירת סימון הצלחה
+            const failSpan = imgContainer.querySelector(".upload-status");
+            if (failSpan) failSpan.remove();
+
             const statusSpan = document.createElement("span");
             statusSpan.className = "upload-status";
             statusSpan.textContent = "✅";
             imgContainer.appendChild(statusSpan);
+
+            // מחזיר את כפתור ההוספה למצב פעיל עם אייקון מצלמה
+            if (addBtn) {
+              addBtn.disabled = false;
+              addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" />';
+            }
           } else {
             throw new Error("העלאה נכשלה");
           }
         } catch (err) {
+          // הסרת תמונות או סטטוסים קיימים לפני הצגת השגיאה
+          imgContainer.innerHTML = "";
+
           const failSpan = document.createElement("span");
           failSpan.className = "upload-status";
           failSpan.style.color = "red";
@@ -354,14 +360,21 @@
 
           const retryBtn = document.createElement("button");
           retryBtn.textContent = "נסה שוב";
-          retryBtn.onclick = () => {
-            uploadFile(idx, file); // מעלה שוב את אותו הקובץ בלי לבחור שוב
+          // חשוב: רק ניסיון חוזר להעלאת התמונה, לא שליחת הטופס
+          retryBtn.onclick = (event) => {
+            event.stopPropagation();
+            event.preventDefault();
+            uploadFile(idx, file);
           };
 
           failSpan.appendChild(retryBtn);
           imgContainer.appendChild(failSpan);
-        } finally {
-          addBtn.classList.remove('uploading');
+
+          // מחזיר את כפתור ההוספה למצב פעיל עם אייקון מצלמה
+          if (addBtn) {
+            addBtn.disabled = false;
+            addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" />';
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -410,7 +423,7 @@
         text: item.text,
         done: document.getElementById(`item${idx}`).checked,
         images: uploadedFiles[idx] || [],
-        requireImage: item.requireImage,
+        requireImage: item.requireImage, // מוסיף את השדה לשרת
       }));
 
       const reportRes = await fetch("/api/create-report", {
@@ -436,17 +449,15 @@
         if (!closeBtn) {
           closeBtn = document.createElement("button");
           closeBtn.id = "closeProgressBtn";
-          closeBtn.textContent = "סגור ללא שליחה";
+          closeBtn.textContent = "❌ סגור";
           closeBtn.style.marginLeft = "10px";
           closeBtn.style.fontSize = "20px";
           closeBtn.style.cursor = "pointer";
-          closeBtn.style.backgroundColor = "#ff3b30";
+          closeBtn.style.backgroundColor = "#ff3b30"; /* אדום של ביטול */
           closeBtn.style.color = "white";
           closeBtn.style.border = "none";
-          closeBtn.style.borderRadius = "50px";
           closeBtn.style.padding = "10px 20px";
-          closeBtn.onmouseenter = () => closeBtn.style.backgroundColor = "#d32f2f";
-          closeBtn.onmouseleave = () => closeBtn.style.backgroundColor = "#ff3b30";
+          closeBtn.style.borderRadius = "50px";
           closeBtn.onclick = () => {
             document.getElementById("progressOverlay").style.display = "none";
           };
