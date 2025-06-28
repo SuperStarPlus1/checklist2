@@ -149,7 +149,7 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${DROPBOX_TOKEN}`,
         "Content-Type": "application/octet-stream",
         "Dropbox-API-Arg": JSON.stringify({
-          path: `/forms/super/${folderName}/${filename}`,
+          path: `/forms/${folderName}/${filename}`,
           mode: "overwrite",
           autorename: false,
           mute: false,
