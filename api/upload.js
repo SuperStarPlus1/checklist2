@@ -39,7 +39,7 @@ async function renameExistingFolder(oldPath, version = 1) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ path: newPath })
-  });
+  });  
 
   if (checkResp.ok) {
     // אם קיימת, מנסים שוב עם מספר גרסה גבוה יותר
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing folderName' });
     }
 
-    const basePath = `/forms/${folderName}`;
+    const basePath = `/forms/super/${folderName}`;
     const DROPBOX_TOKEN = await getDropboxAccessToken();
 
     if (!fileName && !fileData) {
