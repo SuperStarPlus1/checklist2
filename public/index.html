@@ -247,7 +247,7 @@
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
 
-    const folderName = `super/${now.toISOString().split("T")[0]}`;
+    const folderName = `${now.toISOString().split("T")[0]}`;
 
     async function prepareFolder() {
       const res = await fetch("/api/upload", {
