@@ -83,7 +83,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing folderName' });
     }
 
-    const basePath = `/forms/super/${folderName}`;
+    const basePath = `/forms/${folderName}`;
     const DROPBOX_TOKEN = await getDropboxAccessToken();
 
     if (!fileName && !fileData) {
