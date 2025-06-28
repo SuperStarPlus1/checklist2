@@ -242,11 +242,12 @@
         alert("שגיאה בהכנת התיקיה: " + err.message);
       });
 
+    // עדכון ספירת משימות שנותרו - רק כאן ונקרא גם בתחילת טעינת העמוד
     function updateTaskCounter() {
       const total = items.length;
       let done = 0;
       for (let i = 0; i < total; i++) {
-        if (document.getElementById(`item${i}`).checked) done++;
+        if (document.getElementById(`item${i}`)?.checked) done++;
       }
       document.getElementById("taskCounter").innerText = `משימות שנותרו: ${total - done}`;
     }
@@ -289,7 +290,6 @@
         const fileName = `item${idx}_image${uploadedFiles[idx].length + 1}.jpg`;
 
         const imgContainer = document.getElementById(`imgContainer${idx}`);
-        imgContainer.innerHTML = ""; // ניקוי קודם
 
         try {
           const res = await fetch("/api/upload", {
@@ -309,14 +309,18 @@
             document.getElementById(`item${idx}`).checked = true;
             updateTaskCounter();
 
-            const statusSpan = document.createElement("span");
-            statusSpan.className = "upload-status";
-            statusSpan.textContent = "✅";
-            imgContainer.appendChild(statusSpan);
+            // אם אין סימן וי, הוסף
+            if (!imgContainer.querySelector('.upload-status')) {
+              const statusSpan = document.createElement("span");
+              statusSpan.className = "upload-status";
+              statusSpan.textContent = "✅";
+              imgContainer.appendChild(statusSpan);
+            }
           } else {
             throw new Error("העלאה נכשלה");
           }
         } catch (err) {
+          imgContainer.innerHTML = '';
           const failSpan = document.createElement("span");
           failSpan.className = "upload-status";
           failSpan.style.color = "red";
@@ -325,7 +329,7 @@
           const retryBtn = document.createElement("button");
           retryBtn.textContent = "נסה שוב";
           retryBtn.onclick = () => {
-            uploadFile(idx, file); // מעלה שוב את אותו הקובץ בלי לבחור שוב
+            uploadFile(idx, file);
           };
 
           failSpan.appendChild(retryBtn);
@@ -404,7 +408,7 @@
         if (!closeBtn) {
           closeBtn = document.createElement("button");
           closeBtn.id = "closeProgressBtn";
-          closeBtn.textContent = "❌ סגור";
+          closeBtn.textContent = "❌ סגור ללא שליחה";
           closeBtn.style.marginLeft = "10px";
           closeBtn.style.fontSize = "20px";
           closeBtn.style.cursor = "pointer";
@@ -417,7 +421,7 @@
         btn.onclick = () => {
           window.open(
             `https://api.whatsapp.com/send?phone=972549090028&text=${encodeURIComponent(
-              "נוצר דוח חדש:\n" + link
+              "נוצר דוח סגירת סניף חדש:\n" + link
             )}`,
             "_blank"
           );
@@ -429,16 +433,6 @@
         document.getElementById("progressOverlay").style.display = "none";
       }
     });
-
-    function updateTaskCounter() {
-      // מפעיל גם בתחילת טעינת העמוד כדי לעדכן
-      const total = items.length;
-      let done = 0;
-      for (let i = 0; i < total; i++) {
-        if (document.getElementById(`item${i}`)?.checked) done++;
-      }
-      document.getElementById("taskCounter").innerText = `משימות שנותרו: ${total - done}`;
-    }
   </script>
 </body>
 </html>
