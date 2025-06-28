@@ -80,11 +80,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing folderName' });
     }
 
-    // שים לב לשינוי פה - הנתיב החדש
+    // שינוי הנתיב ל-forms/super/{folderName}
     const basePath = `/forms/super/${folderName}`;
     const DROPBOX_TOKEN = await getDropboxAccessToken();
 
     if (!fileName && !fileData) {
+      // רק יצירת תיקיה אם לא התקבלו קבצים
       const checkResp = await fetch("https://api.dropboxapi.com/2/files/get_metadata", {
         method: "POST",
         headers: {
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
       let finalPath = basePath;
 
       if (checkResp.ok) {
+        // תיקיה קיימת - שנה שם בתוספת _verN
         finalPath = await renameExistingFolder(basePath);
       } else if (checkResp.status !== 409) {
         const errText = await checkResp.text();
