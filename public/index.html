@@ -108,11 +108,10 @@
       width: 100%; height: 100%;
       background: rgba(0,0,0,0.5);
       z-index: 9999;
-      display: flex;
+      display: none;
       justify-content: center;
       align-items: center;
       flex-direction: column;
-      display: none;
     }
     #progressContainer {
       background: white;
@@ -122,6 +121,7 @@
       width: 90%;
       max-width: 400px;
       box-shadow: 0 0 20px rgba(0,0,0,0.5);
+      position: relative;
     }
     #progressHeader img {
       width: 150px;
@@ -156,6 +156,18 @@
       cursor: pointer;
       display: none;
     }
+    #closeProgressBtn {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background-color: #ff3b30; /* אדום ביטול */
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 50px;
+      font-size: 18px;
+      cursor: pointer;
+    }
     @keyframes pulse {
       0% { box-shadow: 0 0 5px yellow; }
       50% { box-shadow: 0 0 15px yellow; }
@@ -179,6 +191,7 @@
       <div id="progressText">מתחיל...</div>
       <div id="progressBarContainer"><div id="progressBar"></div></div>
       <button id="whatsappInsideBtn">📤 שלח את הדוח בוואטסאפ</button>
+      <button id="closeProgressBtn" style="display:none;">❌ סגור</button>
     </div>
   </div>
   <header>
@@ -278,7 +291,9 @@
         addBtn.type = "button";
         addBtn.className = "add-image-btn";
         addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" />';
+
         addBtn.onclick = () => addImage(idx);
+
         section.appendChild(addBtn);
 
         const imgContainer = document.createElement("div");
@@ -289,7 +304,10 @@
       }
 
       checklistDiv.appendChild(section);
-      document.getElementById(`item${idx}`).addEventListener("change", updateTaskCounter);
+
+      document.getElementById(`item${idx}`).addEventListener("change", () => {
+        updateTaskCounter();
+      });
     });
 
     updateTaskCounter();
@@ -302,12 +320,12 @@
 
         const imgContainer = document.getElementById(`imgContainer${idx}`);
 
-        // לפני ההעלאה - ניקוי הודעות שגיאה קודמות והצגת טקסט "בתמונה בהעלאה"
+        // ניקוי הודעות שגיאה קודמות
         const oldFailSpan = imgContainer.querySelector(".upload-status");
         if (oldFailSpan) oldFailSpan.remove();
 
-        // מחליף את כפתור הוספת תמונה לטקסט העלאה
-        const addBtn = imgContainer.previousSibling; // הכפתור הוא אחות קודמת
+        // החלפת כפתור ההוספה לטקסט "בתמונה בהעלאה אנא המתן..."
+        const addBtn = imgContainer.previousSibling;
         if (addBtn && addBtn.classList.contains("add-image-btn")) {
           addBtn.disabled = true;
           addBtn.innerHTML = '<span class="uploading-text">בתמונה בהעלאה אנא המתן...</span>';
@@ -332,16 +350,17 @@
             document.getElementById(`item${idx}`).checked = true;
             updateTaskCounter();
 
-            // הסרת הודעות שגיאה ויצירת סימון הצלחה
+            // הסרת הודעות שגיאה אם קיימות
             const failSpan = imgContainer.querySelector(".upload-status");
             if (failSpan) failSpan.remove();
 
+            // סימון הצלחה
             const statusSpan = document.createElement("span");
             statusSpan.className = "upload-status";
             statusSpan.textContent = "✅";
             imgContainer.appendChild(statusSpan);
 
-            // מחזיר את כפתור ההוספה למצב פעיל עם אייקון מצלמה
+            // החזרת כפתור ההוספה למצב פעיל עם האייקון
             if (addBtn) {
               addBtn.disabled = false;
               addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" />';
@@ -350,7 +369,7 @@
             throw new Error("העלאה נכשלה");
           }
         } catch (err) {
-          // הסרת תמונות או סטטוסים קיימים לפני הצגת השגיאה
+          // ניקוי תמונות וסטטוסים קיימים לפני הצגת השגיאה
           imgContainer.innerHTML = "";
 
           const failSpan = document.createElement("span");
@@ -360,7 +379,8 @@
 
           const retryBtn = document.createElement("button");
           retryBtn.textContent = "נסה שוב";
-          // חשוב: רק ניסיון חוזר להעלאת התמונה, לא שליחת הטופס
+
+          // ניסיון חוזר בלבד, ללא שליחת הטופס
           retryBtn.onclick = (event) => {
             event.stopPropagation();
             event.preventDefault();
@@ -370,7 +390,6 @@
           failSpan.appendChild(retryBtn);
           imgContainer.appendChild(failSpan);
 
-          // מחזיר את כפתור ההוספה למצב פעיל עם אייקון מצלמה
           if (addBtn) {
             addBtn.disabled = false;
             addBtn.innerHTML = '<img src="https://cdn-icons-png.flaticon.com/512/685/685655.png" />';
@@ -423,7 +442,7 @@
         text: item.text,
         done: document.getElementById(`item${idx}`).checked,
         images: uploadedFiles[idx] || [],
-        requireImage: item.requireImage, // מוסיף את השדה לשרת
+        requireImage: item.requireImage,
       }));
 
       const reportRes = await fetch("/api/create-report", {
@@ -444,25 +463,8 @@
         const btn = document.getElementById("whatsappInsideBtn");
         btn.style.display = "inline-block";
 
-        // כפתור סגור ליד כפתור הוואטסאפ
         let closeBtn = document.getElementById("closeProgressBtn");
-        if (!closeBtn) {
-          closeBtn = document.createElement("button");
-          closeBtn.id = "closeProgressBtn";
-          closeBtn.textContent = "❌ סגור";
-          closeBtn.style.marginLeft = "10px";
-          closeBtn.style.fontSize = "20px";
-          closeBtn.style.cursor = "pointer";
-          closeBtn.style.backgroundColor = "#ff3b30"; /* אדום של ביטול */
-          closeBtn.style.color = "white";
-          closeBtn.style.border = "none";
-          closeBtn.style.padding = "10px 20px";
-          closeBtn.style.borderRadius = "50px";
-          closeBtn.onclick = () => {
-            document.getElementById("progressOverlay").style.display = "none";
-          };
-          btn.parentNode.appendChild(closeBtn);
-        }
+        closeBtn.style.display = "inline-block";
 
         btn.onclick = () => {
           window.open(
