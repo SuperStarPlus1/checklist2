@@ -19,7 +19,8 @@ export default function Home() {
 
   useEffect(() => {
     const now = new Date();
-    setFolderName(now.toISOString().split("T")[0]);
+   setFolderName(`super/${now.toISOString().split("T")[0]}`);
+
     setItems(
       itemsData.map((item) => ({
         ...item,
