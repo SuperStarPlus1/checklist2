@@ -221,6 +221,7 @@
 
     const checklistDiv = document.getElementById("checklist");
     const uploadedFiles = {};
+    const uploadStatus = {}; // ניהול סטטוס העלאות, לפי סעיף ותמונה
 
     const folderName = now.toISOString().split("T")[0];
 
@@ -242,14 +243,21 @@
         alert("שגיאה בהכנת התיקיה: " + err.message);
       });
 
-    // עדכון ספירת משימות שנותרו - רק כאן ונקרא גם בתחילת טעינת העמוד
     function updateTaskCounter() {
       const total = items.length;
       let done = 0;
       for (let i = 0; i < total; i++) {
-        if (document.getElementById(`item${i}`)?.checked) done++;
+        if (document.getElementById(`item${i}`).checked) done++;
       }
       document.getElementById("taskCounter").innerText = `משימות שנותרו: ${total - done}`;
+    }
+
+    function updateSubmitButtonState() {
+      const submitBtn = document.querySelector("#checkForm button[type=submit]");
+      const hasUploadingOrFailed = Object.values(uploadStatus).some(statusArray =>
+        statusArray.some(status => status === 'uploading' || status === 'failed')
+      );
+      submitBtn.disabled = hasUploadingOrFailed;
     }
 
     items.forEach((item, idx) => {
@@ -275,6 +283,7 @@
         section.appendChild(imgContainer);
 
         uploadedFiles[idx] = [];
+        uploadStatus[idx] = [];
       }
 
       checklistDiv.appendChild(section);
@@ -282,8 +291,12 @@
     });
 
     updateTaskCounter();
+    updateSubmitButtonState();
 
-    async function uploadFile(idx, file) {
+    async function uploadFile(idx, file, imageIndex) {
+      uploadStatus[idx][imageIndex] = 'uploading';
+      updateSubmitButtonState();
+
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = reader.result.split(",")[1];
@@ -301,26 +314,31 @@
           if (res.ok) {
             uploadedFiles[idx].push(fileName);
 
-            const img = document.createElement("img");
-            img.src = reader.result;
-            img.className = "preview-img";
-            imgContainer.appendChild(img);
+            // ניקוי והצגה מחדש של כל התמונות לסעיף
+            imgContainer.innerHTML = "";
+            for (let i = 0; i < uploadedFiles[idx].length; i++) {
+              const img = document.createElement("img");
+              img.src = URL.createObjectURL(await file.slice(0)); // נשתמש בקובץ שנשלח
+              img.className = "preview-img";
+              imgContainer.appendChild(img);
+            }
 
             document.getElementById(`item${idx}`).checked = true;
             updateTaskCounter();
 
-            // אם אין סימן וי, הוסף
-            if (!imgContainer.querySelector('.upload-status')) {
-              const statusSpan = document.createElement("span");
-              statusSpan.className = "upload-status";
-              statusSpan.textContent = "✅";
-              imgContainer.appendChild(statusSpan);
-            }
+            const statusSpan = document.createElement("span");
+            statusSpan.className = "upload-status";
+            statusSpan.textContent = "✅";
+            imgContainer.appendChild(statusSpan);
+
+            uploadStatus[idx][imageIndex] = 'success';
+            updateSubmitButtonState();
+
           } else {
             throw new Error("העלאה נכשלה");
           }
         } catch (err) {
-          imgContainer.innerHTML = '';
+          imgContainer.innerHTML = "";
           const failSpan = document.createElement("span");
           failSpan.className = "upload-status";
           failSpan.style.color = "red";
@@ -329,11 +347,16 @@
           const retryBtn = document.createElement("button");
           retryBtn.textContent = "נסה שוב";
           retryBtn.onclick = () => {
-            uploadFile(idx, file);
+            uploadStatus[idx][imageIndex] = 'uploading';
+            updateSubmitButtonState();
+            uploadFile(idx, file, imageIndex);
           };
 
           failSpan.appendChild(retryBtn);
           imgContainer.appendChild(failSpan);
+
+          uploadStatus[idx][imageIndex] = 'failed';
+          updateSubmitButtonState();
         }
       };
       reader.readAsDataURL(file);
@@ -354,28 +377,17 @@
           return;
         }
 
-        await uploadFile(idx, file);
+        // מוסיף סטטוס חדש במערך העלאות לסעיף
+        const imageIndex = uploadStatus[idx].length;
+        uploadStatus[idx][imageIndex] = 'uploading';
+
+        await uploadFile(idx, file, imageIndex);
       };
       input.click();
     }
 
-    function showProgress(stage, percent) {
-      document.getElementById("progressOverlay").style.display = "flex";
-      document.getElementById("progressText").innerText = stage;
-      document.getElementById("progressBar").style.width = percent + "%";
-    }
-
     document.getElementById("checkForm").addEventListener("submit", async (e) => {
       e.preventDefault();
-
-      /*
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].requireImage && (!uploadedFiles[i] || uploadedFiles[i].length === 0)) {
-          alert(`נדרש לצרף לפחות תמונה אחת עבור: ${items[i].text}`);
-          return;
-        }
-      }
-      */
 
       showProgress("יוצר דוח...", 80);
       const sections = items.map((item, idx) => ({
@@ -408,7 +420,7 @@
         if (!closeBtn) {
           closeBtn = document.createElement("button");
           closeBtn.id = "closeProgressBtn";
-          closeBtn.textContent = "❌ סגור ללא שליחה";
+          closeBtn.textContent = "❌ סגור";
           closeBtn.style.marginLeft = "10px";
           closeBtn.style.fontSize = "20px";
           closeBtn.style.cursor = "pointer";
@@ -421,7 +433,7 @@
         btn.onclick = () => {
           window.open(
             `https://api.whatsapp.com/send?phone=972549090028&text=${encodeURIComponent(
-              "נוצר דוח סגירת סניף חדש:\n" + link
+              "נוצר דוח חדש:\n" + link
             )}`,
             "_blank"
           );
@@ -433,6 +445,13 @@
         document.getElementById("progressOverlay").style.display = "none";
       }
     });
+
+    function showProgress(stage, percent) {
+      document.getElementById("progressOverlay").style.display = "flex";
+      document.getElementById("progressText").innerText = stage;
+      document.getElementById("progressBar").style.width = percent + "%";
+    }
+
   </script>
 </body>
 </html>
