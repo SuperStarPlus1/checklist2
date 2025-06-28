@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   const { folderName } = req.body;
   if (!folderName) return res.status(400).json({ error: 'Missing folderName' });
 
-  const filePath = `/forms/${folderName}/report.html`;
+  const filePath = `/forms/super/${folderName}/report.html`;
 
   try {
     const DROPBOX_TOKEN = await getDropboxAccessToken();
