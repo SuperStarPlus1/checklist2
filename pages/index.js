@@ -229,7 +229,7 @@ export default function Home() {
                   {(uploadedFiles[idx] || []).map((file, i) => (
                     <img
                       key={i}
-                      src={`https://content.dropboxapi.com/2/files/download?path=/forms/${folderName}/${file}`}
+                      src={`https://content.dropboxapi.com/2/files/download?path=/forms/super/${folderName}/${file}`}
                       alt={`image ${i + 1}`}
                       style={{
                         width: 50,
