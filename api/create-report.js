@@ -80,7 +80,7 @@ export default async function handler(req, res) {
         if (section.images && section.images.length > 0) {
           const imgsHtml = [];
           for (let i = 0; i < Math.min(3, section.images.length); i++) {
-            const imagePath = `/forms/super/${folderName}/${section.images[i]}`;
+            const imagePath = `/forms/${folderName}/${section.images[i]}`;
             let base64Image;
             try {
               base64Image = await downloadFileAsBase64(DROPBOX_TOKEN, imagePath);
@@ -172,7 +172,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        path: `/forms/super/${folderName}/${filename}`,
+        path: `/forms/${folderName}/${filename}`,
         settings: { requested_visibility: "public" },
       }),
     });
