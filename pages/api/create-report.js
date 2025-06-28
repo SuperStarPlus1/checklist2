@@ -40,6 +40,7 @@ export default async function handler(req, res) {
         if (section.images && section.images.length > 0) {
           const imgsHtml = [];
           for (let i = 0; i < Math.min(3, section.images.length); i++) {
+            // נתיב התמונה בתוך תיקיית super
             const imagePath = `/forms/super/${folderName}/${section.images[i]}`;
             let base64Image;
             try {
@@ -54,6 +55,7 @@ export default async function handler(req, res) {
           if (imgsHtml.length > 0) {
             reportLines.push(`<div style="display:flex; justify-content:flex-start; direction:ltr;">${imgsHtml.join('')}</div>`);
           } else {
+            // לוגו אם אין תמונות
             reportLines.push(`<img src="/forms/logo.png" alt="No image" style="width:120px; height:120px; object-fit:contain; margin:5px;" />`);
           }
         } else {
@@ -115,8 +117,7 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        path: `/forms/super/
-        ${folderName}/${filename}`,
+        path: `/forms/super/${folderName}/${filename}`,
         settings: { requested_visibility: "public" },
       }),
     });
