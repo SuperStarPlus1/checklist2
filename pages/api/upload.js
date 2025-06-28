@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   if (!fileName) return res.status(400).json({ error: 'Missing fileName' });
   if (!fileData) return res.status(400).json({ error: 'Missing fileData' });
 
-  const DROPBOX_PATH = `/forms/${folderName}/${fileName}`;
+  const DROPBOX_PATH = `/forms/super/${folderName}/${fileName}`;
 
   try {
     const DROPBOX_TOKEN = await getDropboxAccessToken();
